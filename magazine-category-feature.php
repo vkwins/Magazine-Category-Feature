@@ -1,14 +1,14 @@
 <?php
 /**
  * Plugin Name:       Magazine Category Feature
- * Description:       Example block scaffolded with Create Block tool.
- * Version:           0.1.0
+ * Description:       A magazine-style block that shows the newest article in a category, then four cards. The list stays current without an editor updating the page.
+ * Version:           1.0
  * Requires at least: 6.8
- * Requires PHP:      7.4
- * Author:            The WordPress Contributors
+ * Requires PHP:      8.0
+ * Author:            Vivek Mishra
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Update URI:        false
+ * Update URI:        https://github.com/vkwins/Magazine-Category-Feature
  * Text Domain:       magazine-category-feature
  *
  * @package MagazineCategoryFeature
