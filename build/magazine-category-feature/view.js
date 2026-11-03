@@ -1,0 +1,1 @@
+console.log("Hello World! (from magazine-category-feature-magazine-category-feature block)");
