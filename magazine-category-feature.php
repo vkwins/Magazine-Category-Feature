@@ -25,6 +25,7 @@ define( 'MAGAZINE_CATEGORY_FEATURE_CACHE_TTL', 5 * MINUTE_IN_SECONDS );
 
 require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/query.php';
 require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/template.php';
+require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/sponsored.php';
 
 
 /**
@@ -36,6 +37,7 @@ require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/inc
  * @see https://make.wordpress.org/core/2024/10/17/new-block-type-registration-apis-to-improve-performance-in-wordpress-6-7/
  */
 function magazine_category_feature_magazine_category_feature_block_init() {
+	magazine_category_feature_register_sponsored_meta();
 	wp_register_block_types_from_metadata_collection( __DIR__ . '/build', __DIR__ . '/build/blocks-manifest.php' );
 }
 add_action( 'init', 'magazine_category_feature_magazine_category_feature_block_init' );

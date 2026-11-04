@@ -13,7 +13,9 @@ import { registerBlockType } from '@wordpress/blocks';
  */
 import './style.scss';
 import Edit from './edit';
+import SponsoredPanel from './sponsored';
 import metadata from './block.json';
+import { registerPlugin } from '@wordpress/plugins';
 
 /**
  * Every block starts by registering a new block type definition.
@@ -30,4 +32,8 @@ registerBlockType( metadata.name, {
 	 * Dynamic block: front-end markup comes from render.php.
 	 */
 	save: () => null,
+} );
+
+registerPlugin( 'magazine-category-feature-sponsored', {
+	render: SponsoredPanel,
 } );
