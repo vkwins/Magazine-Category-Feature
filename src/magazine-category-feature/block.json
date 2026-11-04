@@ -2,16 +2,32 @@
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
 	"name": "magazine-category-feature/articles",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"title": "Magazine Category Feature",
 	"category": "widgets",
-	"icon": "smiley",
-	"description": "Example block scaffolded with Create Block tool.",
-	"example": {},
-	"supports": {
-		"html": false
-	},
+	"icon": "grid-view",
+	"description": "Shows the newest article in a category, then four cards.",
+	"keywords": [ "category", "articles", "magazine", "latest" ],
 	"textdomain": "magazine-category-feature",
+	"attributes": {
+		"categoryId": {
+			"type": "number",
+			"default": 0
+		},
+		"showCategoryLabel": {
+			"type": "boolean",
+			"default": true
+		},
+		"showExcerpt": {
+			"type": "boolean",
+			"default": true
+		}
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ],
+		"anchor": true
+	},
 	"editorScript": "file:./index.js",
 	"editorStyle": "file:./index.css",
 	"style": "file:./style-index.css",

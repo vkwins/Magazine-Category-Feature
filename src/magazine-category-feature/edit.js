@@ -1,39 +1,104 @@
 /**
- * Retrieves the translation of text.
+ * Sidebar controls and a preview that uses the same PHP as the front end.
  *
- * @see https://developer.wordpress.org/block-editor/reference-guides/packages/packages-i18n/
+ * ServerSideRender posts the attributes to the block-renderer endpoint.
+ * render.php answers. The preview cannot drift from the public markup
+ * because there is only one template.
  */
 import { __ } from '@wordpress/i18n';
-/**
- * React hook that is used to mark the block wrapper element.
- * It provides all the necessary props like the class name.
- *
- * @see https://developer.wordpress.org/block-editor/reference-guides/packages/packages-block-editor/#useblockprops
- */
-import { useBlockProps } from '@wordpress/block-editor';
-/**
- * Lets webpack process CSS, SASS or SCSS files referenced in JavaScript files.
- * Those files can contain any CSS code that gets applied to the editor.
- *
- * @see https://www.npmjs.com/package/@wordpress/scripts#using-css
- */
+import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
+import {
+	Disabled,
+	PanelBody,
+	SelectControl,
+	ToggleControl,
+} from '@wordpress/components';
+import { useSelect } from '@wordpress/data';
+import ServerSideRender from '@wordpress/server-side-render';
+
+import metadata from './block.json';
 import './editor.scss';
 
-/**
- * The edit function describes the structure of your block in the context of the
- * editor. This represents what the editor will render when the block is used.
- *
- * @see https://developer.wordpress.org/block-editor/reference-guides/block-api/block-edit-save/#edit
- *
- * @return {Element} Element to render.
- */
-export default function Edit() {
+export default function Edit( { attributes, setAttributes } ) {
+	const { categoryId, showCategoryLabel, showExcerpt } = attributes;
+
+	const categories = useSelect(
+		( select ) =>
+			select( 'core' ).getEntityRecords( 'taxonomy', 'category', {
+				per_page: 100,
+				orderby: 'name',
+				order: 'asc',
+				hide_empty: false,
+				_fields: 'id,name',
+			} ),
+		[]
+	);
+
+	const options = [
+		{
+			label: categories
+				? __( 'Select a category', 'magazine-category-feature' )
+				: __( 'Loading categories…', 'magazine-category-feature' ),
+			value: '0',
+		},
+		...( categories || [] ).map( ( category ) => ( {
+			label: category.name,
+			value: String( category.id ),
+		} ) ),
+	];
+
 	return (
-		<p { ...useBlockProps() }>
-			{ __(
-				'Magazine Category Feature – hello from the editor!',
-				'magazine-category-feature'
-			) }
-		</p>
+		<>
+			<InspectorControls>
+				<PanelBody
+					title={ __( 'Magazine Category Feature', 'magazine-category-feature' ) }
+				>
+					<SelectControl
+						label={ __( 'Category', 'magazine-category-feature' ) }
+						value={ String( categoryId || 0 ) }
+						options={ options }
+						help={ __(
+							'The newest post is the feature. The next four are the cards.',
+							'magazine-category-feature'
+						) }
+						onChange={ ( value ) =>
+							setAttributes( { categoryId: Number( value ) } )
+						}
+					/>
+					<ToggleControl
+						label={ __(
+							'Display category label',
+							'magazine-category-feature'
+						) }
+						checked={ !! showCategoryLabel }
+						onChange={ ( value ) =>
+							setAttributes( { showCategoryLabel: value } )
+						}
+					/>
+					<ToggleControl
+						label={ __(
+							'Show subtext (excerpt)',
+							'magazine-category-feature'
+						) }
+						checked={ !! showExcerpt }
+						help={ __(
+							'Applies to the featured article only.',
+							'magazine-category-feature'
+						) }
+						onChange={ ( value ) =>
+							setAttributes( { showExcerpt: value } )
+						}
+					/>
+				</PanelBody>
+			</InspectorControls>
+			<div { ...useBlockProps() }>
+				<Disabled>
+					<ServerSideRender
+						block={ metadata.name }
+						attributes={ attributes }
+					/>
+				</Disabled>
+			</div>
+		</>
 	);
 }
