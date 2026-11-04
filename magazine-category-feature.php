@@ -3,7 +3,7 @@
  * Plugin Name:       Magazine Category Feature
  * Description:       A magazine-style block that shows the newest article in a category, then four cards. The list stays current without an editor updating the page.
  * Version:           1.0
- * Requires at least: 6.8
+ * Requires at least: 6.7
  * Requires PHP:      8.0
  * Author:            Vivek Mishra
  * License:           GPL-2.0-or-later
@@ -26,6 +26,7 @@ define( 'MAGAZINE_CATEGORY_FEATURE_CACHE_TTL', 5 * MINUTE_IN_SECONDS );
 require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/query.php';
 require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/template.php';
 require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/sponsored.php';
+require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/invalidation.php';
 
 
 /**
@@ -38,11 +39,20 @@ require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/inc
  */
 function magazine_category_feature_magazine_category_feature_block_init() {
 	magazine_category_feature_register_sponsored_meta();
-	wp_register_block_types_from_metadata_collection( __DIR__ . '/build', __DIR__ . '/build/blocks-manifest.php' );
+
+	// WordPress 6.8+ fast path for metadata collections.
+	if ( function_exists( 'wp_register_block_types_from_metadata_collection' ) ) {
+		wp_register_block_types_from_metadata_collection( __DIR__ . '/build', __DIR__ . '/build/blocks-manifest.php' );
+		return;
+	}
+
+	// WordPress 6.7 compatibility path.
+	register_block_type( __DIR__ . '/build/magazine-category-feature' );
 }
 add_action( 'init', 'magazine_category_feature_magazine_category_feature_block_init' );
 
 add_action( 'wp_enqueue_scripts', 'magazine_category_feature_enqueue_style_in_head' );
+add_filter( 'render_block', 'magazine_category_feature_enqueue_style_on_render', 10, 2 );
 /**
  * Prints the block CSS in the document head when this singular view contains the block.
  *
@@ -71,4 +81,32 @@ function magazine_category_feature_enqueue_style_in_head(): void {
 	foreach ( (array) $block_type->style as $handle ) {
 		wp_enqueue_style( $handle );
 	}
+}
+
+/**
+ * Fallback for non-singular or template-part usage.
+ *
+ * Some layouts render this block from template parts or non-singular contexts where
+ * has_block() on the current post cannot detect it ahead of time. When that happens,
+ * enqueue styles as soon as this block is encountered during rendering.
+ *
+ * @param string               $block_content Rendered block HTML.
+ * @param array<string, mixed> $block         Parsed block.
+ * @return string
+ */
+function magazine_category_feature_enqueue_style_on_render( string $block_content, array $block ): string {
+	if ( is_admin() || ( $block['blockName'] ?? '' ) !== 'magazine-category-feature/articles' ) {
+		return $block_content;
+	}
+
+	$block_type = WP_Block_Type_Registry::get_instance()->get_registered( 'magazine-category-feature/articles' );
+	if ( ! $block_type || empty( $block_type->style ) ) {
+		return $block_content;
+	}
+
+	foreach ( (array) $block_type->style as $handle ) {
+		wp_enqueue_style( $handle );
+	}
+
+	return $block_content;
 }

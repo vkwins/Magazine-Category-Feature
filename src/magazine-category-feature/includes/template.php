@@ -67,9 +67,8 @@ function magazine_category_feature_media_html( WP_Post $post, string $variant, a
 
 	if ( ! $thumb_id ) {
 		return sprintf(
-			'<span class="%1$s magazine-category-feature__placeholder" role="img" aria-label="%2$s"></span>',
-			esc_attr( $class ),
-			esc_attr__( 'No featured image', 'magazine-category-feature' )
+			'<span class="%1$s magazine-category-feature__placeholder" aria-hidden="true"></span>',
+			esc_attr( $class )
 		);
 	}
 

@@ -1,0 +1,21 @@
+/**
+ * Example only. This file is not enqueued.
+ *
+ * Paste the variables you need into the brand theme, on body.
+ * Each of the 15 sites keeps its own fonts and colours.
+ * The plugin stays one codebase.
+ *
+ * Load this after the block stylesheet if you set the variables
+ * on .magazine-category-feature instead of body. Body is easier: custom
+ * properties inherit, and the block only reads them.
+ */
+
+body {
+	--magazine-category-feature-heading-font: "Canela", georgia, serif;
+	--magazine-category-feature-body-font: "Helvetica Neue", helvetica, arial, sans-serif;
+	--magazine-category-feature-heading-color: #201814;
+	--magazine-category-feature-label-color: #8a8178;
+	--magazine-category-feature-muted-color: #5e564f;
+	--magazine-category-feature-rule: #e5ddd4;
+	--magazine-category-feature-ad-min-height: 250px;
+}
