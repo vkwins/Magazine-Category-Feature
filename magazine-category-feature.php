@@ -17,6 +17,16 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
+
+define( 'MAGAZINE_CATEGORY_FEATURE_DIR', __DIR__ );
+define( 'MAGAZINE_CATEGORY_FEATURE_CACHE_GROUP', 'magazine-category-feature' );
+define( 'MAGAZINE_CATEGORY_FEATURE_CACHE_TTL', 5 * MINUTE_IN_SECONDS );
+
+
+require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/query.php';
+require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/template.php';
+
+
 /**
  * Registers the block(s) metadata from the `blocks-manifest.php` and registers the block type(s)
  * based on the registered block metadata. Behind the scenes, it registers also all assets so they can be enqueued
@@ -29,3 +39,34 @@ function magazine_category_feature_magazine_category_feature_block_init() {
 	wp_register_block_types_from_metadata_collection( __DIR__ . '/build', __DIR__ . '/build/blocks-manifest.php' );
 }
 add_action( 'init', 'magazine_category_feature_magazine_category_feature_block_init' );
+
+add_action( 'wp_enqueue_scripts', 'magazine_category_feature_enqueue_style_in_head' );
+/**
+ * Prints the block CSS in the document head when this singular view contains the block.
+ *
+ * The hero reserves its space with CSS. That CSS has to be in the head, before the
+ * image is requested, or the headline jumps down when the image arrives (CLS).
+ * WordPress can also hoist late block styles, but a landing page should not depend on that.
+ *
+ * Blocks placed only in a template part are still styled when they render. On those
+ * templates, confirm the stylesheet ended up in the head.
+ */
+function magazine_category_feature_enqueue_style_in_head(): void {
+	if ( is_admin() || ! is_singular() ) {
+		return;
+	}
+
+	$post = get_post();
+	if ( ! $post instanceof WP_Post || ! has_block( 'magazine-category-feature/articles', $post ) ) {
+		return;
+	}
+
+	$block_type = WP_Block_Type_Registry::get_instance()->get_registered( 'magazine-category-feature/articles' );
+	if ( ! $block_type || empty( $block_type->style ) ) {
+		return;
+	}
+
+	foreach ( (array) $block_type->style as $handle ) {
+		wp_enqueue_style( $handle );
+	}
+}
