@@ -53,7 +53,6 @@ if ( ! $posts ) {
 
 $hero  = $posts[0];
 $cards = array_slice( $posts, 1, 4 );
-$rows  = array_chunk( $cards, 2 );
 
 $hero_link = get_permalink( $hero );
 $hero_link = is_string( $hero_link ) ? $hero_link : '';
@@ -85,7 +84,6 @@ printf(
 			<?php endif; ?>
 		</a>
 	</article>
-
 	<?php if ( has_action( 'magazine_category_feature_ad_slot' ) ) : ?>
 		<div class="magazine-category-feature__ad">
 			<?php
@@ -104,40 +102,36 @@ printf(
 		</div>
 	<?php endif; ?>
 
-	<?php if ( $rows ) : ?>
+	<?php if ( $cards ) : ?>
 		<div class="magazine-category-feature__rows">
-			<?php foreach ( $rows as $row ) : ?>
-				<div class="magazine-category-feature__row">
-					<?php foreach ( $row as $card ) : ?>
-						<?php
-						$card_link = get_permalink( $card );
-						$card_link = is_string( $card_link ) ? $card_link : '';
-						$sponsored = magazine_category_feature_sponsored_text( $card );
-						?>
-						<article class="magazine-category-feature__card">
-							<a class="magazine-category-feature__card-link" href="<?php echo esc_url( $card_link ); ?>">
-								<?php echo magazine_category_feature_media_html( $card, 'card', $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- helper escapes. ?>
-								<div class="magazine-category-feature__card-body">
-									<?php if ( $show_label ) : ?>
-										<p class="magazine-category-feature__label"><?php echo esc_html( $term->name ); ?></p>
-									<?php endif; ?>
-									<h3 class="magazine-category-feature__card-title"><?php echo esc_html( get_the_title( $card ) ); ?></h3>
-									<?php if ( '' !== $sponsored ) : ?>
-										<p class="magazine-category-feature__sponsored">
-											<?php
-											printf(
-												/* translators: %s: sponsor name. */
-												esc_html__( 'Sponsored by %s', 'magazine-category-feature' ),
-												esc_html( $sponsored )
-											);
-											?>
-										</p>
-									<?php endif; ?>
-								</div>
-							</a>
-						</article>
-					<?php endforeach; ?>
-				</div>
+			<?php foreach ( $cards as $card ) : ?>
+				<?php
+				$card_link = get_permalink( $card );
+				$card_link = is_string( $card_link ) ? $card_link : '';
+				$sponsored = magazine_category_feature_sponsored_text( $card );
+				?>
+				<article class="magazine-category-feature__card">
+					<a class="magazine-category-feature__card-link" href="<?php echo esc_url( $card_link ); ?>">
+						<?php echo magazine_category_feature_media_html( $card, 'card', $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- helper escapes. ?>
+						<div class="magazine-category-feature__card-body">
+							<?php if ( $show_label ) : ?>
+								<p class="magazine-category-feature__label"><?php echo esc_html( $term->name ); ?></p>
+							<?php endif; ?>
+							<h3 class="magazine-category-feature__card-title"><?php echo esc_html( get_the_title( $card ) ); ?></h3>
+							<?php if ( '' !== $sponsored ) : ?>
+								<p class="magazine-category-feature__sponsored">
+									<?php
+									printf(
+										/* translators: %s: sponsor name. */
+										esc_html__( 'Sponsored by %s', 'magazine-category-feature' ),
+										esc_html( $sponsored )
+									);
+									?>
+								</p>
+							<?php endif; ?>
+						</div>
+					</a>
+				</article>
 			<?php endforeach; ?>
 		</div>
 	<?php endif; ?>
