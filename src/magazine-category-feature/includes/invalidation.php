@@ -15,12 +15,199 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+add_action( 'init', 'magazine_category_feature_maybe_install_lookup_table' );
 add_action( 'pre_post_update', 'magazine_category_feature_remember_categories' );
 add_action( 'save_post_post', 'magazine_category_feature_refresh_post_categories' );
 add_action( 'wp_trash_post', 'magazine_category_feature_refresh_post_categories' );
 add_action( 'untrash_post', 'magazine_category_feature_refresh_post_categories' );
 add_action( 'before_delete_post', 'magazine_category_feature_refresh_post_categories' );
+add_action( 'save_post', 'magazine_category_feature_refresh_lookup_for_content', 20, 2 );
+add_action( 'before_delete_post', 'magazine_category_feature_delete_lookup_for_content' );
 add_action( 'delete_category', 'magazine_category_feature_forget_category' );
+
+/**
+ * Creates the category-to-content lookup table.
+ *
+ * Rows are small and append-only per content save. This avoids LIKE scans on
+ * post_content when deciding which URLs to purge.
+ */
+function magazine_category_feature_maybe_install_lookup_table(): void {
+	$installed = (int) get_option( 'magazine_category_feature_lookup_table_version', 0 );
+	if ( $installed >= 1 ) {
+		return;
+	}
+
+	global $wpdb;
+
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+	$table_name      = magazine_category_feature_lookup_table_name();
+	$charset_collate = $wpdb->get_charset_collate();
+	$sql             = "CREATE TABLE {$table_name} (
+		object_id bigint(20) unsigned NOT NULL,
+		object_type varchar(32) NOT NULL,
+		category_id bigint(20) unsigned NOT NULL,
+		PRIMARY KEY  (object_id, object_type, category_id),
+		KEY category_id (category_id),
+		KEY object_type (object_type)
+	) {$charset_collate};";
+
+	dbDelta( $sql );
+	magazine_category_feature_backfill_lookup_table();
+	update_option( 'magazine_category_feature_lookup_table_version', 1, true );
+}
+
+/**
+ * Fully qualified lookup table name.
+ */
+function magazine_category_feature_lookup_table_name(): string {
+	global $wpdb;
+
+	return $wpdb->prefix . 'magazine_category_feature_lookup';
+}
+
+/**
+ * Seeds the lookup table from existing block content.
+ */
+function magazine_category_feature_backfill_lookup_table(): void {
+	$supported_types = array( 'page', 'post', 'wp_template', 'wp_template_part' );
+	$query           = new WP_Query(
+		array(
+			'post_type'              => $supported_types,
+			'post_status'            => array( 'publish', 'private', 'draft', 'future' ),
+			'posts_per_page'         => -1,
+			'fields'                 => 'ids',
+			'ignore_sticky_posts'    => true,
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		)
+	);
+
+	foreach ( $query->posts as $post_id ) {
+		$post = get_post( (int) $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			continue;
+		}
+
+		$category_ids = magazine_category_feature_block_category_ids_from_content( (string) $post->post_content );
+		magazine_category_feature_replace_lookup_rows( (int) $post->ID, $post->post_type, $category_ids );
+	}
+}
+
+/**
+ * Refreshes lookup rows for one content object after save.
+ *
+ * @param int     $post_id Post ID.
+ * @param WP_Post $post    Saved post object.
+ */
+function magazine_category_feature_refresh_lookup_for_content( int $post_id, WP_Post $post ): void {
+	if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
+		return;
+	}
+
+	$supported_types = array( 'page', 'post', 'wp_template', 'wp_template_part' );
+	if ( ! in_array( $post->post_type, $supported_types, true ) ) {
+		return;
+	}
+
+	$category_ids = magazine_category_feature_block_category_ids_from_content( (string) $post->post_content );
+	magazine_category_feature_replace_lookup_rows( $post_id, $post->post_type, $category_ids );
+}
+
+/**
+ * Removes lookup rows for one content object before deletion.
+ *
+ * @param int $post_id Post ID.
+ */
+function magazine_category_feature_delete_lookup_for_content( int $post_id ): void {
+	$post = get_post( $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return;
+	}
+
+	magazine_category_feature_replace_lookup_rows( $post_id, $post->post_type, array() );
+}
+
+/**
+ * Replaces all lookup rows for one content object.
+ *
+ * @param int    $object_id   Post ID that stores block markup.
+ * @param string $object_type Content type, such as page or wp_template_part.
+ * @param int[]  $category_ids Category IDs used by this object's block instances.
+ */
+function magazine_category_feature_replace_lookup_rows( int $object_id, string $object_type, array $category_ids ): void {
+	global $wpdb;
+
+	$table_name = magazine_category_feature_lookup_table_name();
+	$object_id  = (int) $object_id;
+
+	$wpdb->delete(
+		$table_name,
+		array(
+			'object_id'   => $object_id,
+			'object_type' => $object_type,
+		),
+		array( '%d', '%s' )
+	);
+
+	$category_ids = array_values( array_unique( array_filter( array_map( 'intval', $category_ids ) ) ) );
+	foreach ( $category_ids as $category_id ) {
+		$wpdb->insert(
+			$table_name,
+			array(
+				'object_id'   => $object_id,
+				'object_type' => $object_type,
+				'category_id' => $category_id,
+			),
+			array( '%d', '%s', '%d' )
+		);
+	}
+}
+
+/**
+ * Reads this block's category IDs from serialized block markup.
+ *
+ * @param string $content Block content to parse.
+ * @return int[]
+ */
+function magazine_category_feature_block_category_ids_from_content( string $content ): array {
+	if ( '' === $content || ! has_blocks( $content ) ) {
+		return array();
+	}
+
+	$category_ids = array();
+	$blocks       = parse_blocks( $content );
+
+	foreach ( $blocks as $block ) {
+		magazine_category_feature_collect_block_category_ids( $block, $category_ids );
+	}
+
+	return array_values( array_unique( array_filter( array_map( 'intval', $category_ids ) ) ) );
+}
+
+/**
+ * Walks nested blocks and collects category IDs for this block type.
+ *
+ * @param array<string, mixed> $block        Parsed block.
+ * @param int[]                $category_ids Collected category IDs by reference.
+ */
+function magazine_category_feature_collect_block_category_ids( array $block, array &$category_ids ): void {
+	if ( ( $block['blockName'] ?? '' ) === 'magazine-category-feature/articles' ) {
+		$value = $block['attrs']['categoryId'] ?? 0;
+		$value = (int) $value;
+		if ( $value > 0 ) {
+			$category_ids[] = $value;
+		}
+	}
+
+	$inner_blocks = $block['innerBlocks'] ?? array();
+	foreach ( $inner_blocks as $inner_block ) {
+		if ( is_array( $inner_block ) ) {
+			magazine_category_feature_collect_block_category_ids( $inner_block, $category_ids );
+		}
+	}
+}
 
 /**
  * Stores the categories a post had before this save.
@@ -113,6 +300,142 @@ function magazine_category_feature_forget_categories( array $category_ids ): voi
  * @param int[] $category_ids Category term IDs.
  */
 function magazine_category_feature_purge_pages_for_categories( array $category_ids ): void {
+	$category_ids = array_values( array_unique( array_filter( array_map( 'intval', $category_ids ) ) ) );
+	if ( ! $category_ids ) {
+		return;
+	}
+
+	$lookup = magazine_category_feature_lookup_rows_for_categories( $category_ids );
+	$post_ids = $lookup['post_ids'];
+	$urls     = $lookup['urls'];
+
+	/**
+	 * Enables the legacy post_content scan fallback.
+	 *
+	 * Default is false so large sites avoid LIKE scans on every publish.
+	 * Enable temporarily if you need to validate lookup coverage.
+	 *
+	 * @param bool  $enabled      Whether to run the legacy scan.
+	 * @param int[] $category_ids Category IDs being purged.
+	 */
+	$use_fallback_scan = (bool) apply_filters( 'magazine_category_feature_enable_content_scan_fallback', false, $category_ids );
+	if ( $use_fallback_scan ) {
+		$fallback_post_ids = magazine_category_feature_find_posts_by_content_scan( $category_ids );
+		$post_ids          = array_values( array_unique( array_merge( $post_ids, $fallback_post_ids ) ) );
+	}
+
+	foreach ( $post_ids as $post_id ) {
+		$permalink = get_permalink( $post_id );
+		if ( is_string( $permalink ) && '' !== $permalink ) {
+			$urls[] = $permalink;
+		}
+		magazine_category_feature_purge_host_cache( $post_id );
+	}
+
+	$urls = array_values( array_unique( array_filter( array_map( 'strval', $urls ) ) ) );
+
+	/**
+	 * Lets a CDN integration purge the exact URLs a new article affects.
+	 *
+	 * CloudFront does not watch WordPress post saves. Something in the stack
+	 * has to invalidate these paths, or the edge keeps the previous HTML
+	 * until its own TTL.
+	 *
+	 * @param string[] $urls         Public URLs whose HTML embeds the block.
+	 * @param int[]    $category_ids Categories whose membership just changed.
+	 */
+	do_action( 'magazine_category_feature_purge_urls', $urls, array_values( array_unique( array_map( 'intval', $category_ids ) ) ) );
+}
+
+/**
+ * Returns object IDs and URLs from the lookup table for categories.
+ *
+ * @param int[] $category_ids Category IDs.
+ * @return array{post_ids:int[],urls:string[]}
+ */
+function magazine_category_feature_lookup_rows_for_categories( array $category_ids ): array {
+	global $wpdb;
+
+	$table_name = magazine_category_feature_lookup_table_name();
+	$in         = implode( ',', array_fill( 0, count( $category_ids ), '%d' ) );
+	$sql        = "SELECT object_id, object_type FROM {$table_name} WHERE category_id IN ({$in})";
+
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- placeholders are generated from count( $category_ids ).
+	$rows = $wpdb->get_results( $wpdb->prepare( $sql, $category_ids ), ARRAY_A );
+
+	$post_ids          = array();
+	$has_template_part = false;
+
+	foreach ( $rows as $row ) {
+		$object_id   = isset( $row['object_id'] ) ? (int) $row['object_id'] : 0;
+		$object_type = isset( $row['object_type'] ) ? (string) $row['object_type'] : '';
+
+		if ( $object_id <= 0 ) {
+			continue;
+		}
+
+		if ( 'wp_template_part' === $object_type || 'wp_template' === $object_type ) {
+			$has_template_part = true;
+			continue;
+		}
+
+		$post_ids[] = $object_id;
+	}
+
+	$post_ids = array_values( array_unique( $post_ids ) );
+	$urls     = array();
+
+	if ( $has_template_part ) {
+		$urls = magazine_category_feature_template_part_urls();
+	}
+
+	return array(
+		'post_ids' => $post_ids,
+		'urls'     => $urls,
+	);
+}
+
+/**
+ * URLs to purge when a block is sourced from templates/template parts.
+ *
+ * @return string[]
+ */
+function magazine_category_feature_template_part_urls(): array {
+	$urls = array( home_url( '/' ) );
+
+	$front_page_id = (int) get_option( 'page_on_front' );
+	if ( $front_page_id > 0 ) {
+		$front_permalink = get_permalink( $front_page_id );
+		if ( is_string( $front_permalink ) && '' !== $front_permalink ) {
+			$urls[] = $front_permalink;
+		}
+	}
+
+	$posts_page_id = (int) get_option( 'page_for_posts' );
+	if ( $posts_page_id > 0 ) {
+		$posts_permalink = get_permalink( $posts_page_id );
+		if ( is_string( $posts_permalink ) && '' !== $posts_permalink ) {
+			$urls[] = $posts_permalink;
+		}
+	}
+
+	/**
+	 * Lets integrators add template-driven URLs (for example, custom landing pages).
+	 *
+	 * @param string[] $urls Default URLs derived from site front settings.
+	 */
+	$urls = apply_filters( 'magazine_category_feature_template_part_urls', $urls );
+
+	return array_values( array_unique( array_filter( array_map( 'strval', (array) $urls ) ) ) );
+}
+
+/**
+ * Legacy content-scan fallback for direct block placements.
+ *
+ * @param int[] $category_ids Category IDs.
+ * @return int[]
+ */
+function magazine_category_feature_find_posts_by_content_scan( array $category_ids ): array {
 	global $wpdb;
 
 	$post_ids = array();
@@ -145,29 +468,7 @@ function magazine_category_feature_purge_pages_for_categories( array $category_i
 		}
 	}
 
-	$post_ids = array_values( array_unique( $post_ids ) );
-	$urls     = array();
-
-	foreach ( $post_ids as $post_id ) {
-		$permalink = get_permalink( $post_id );
-		if ( is_string( $permalink ) && '' !== $permalink ) {
-			$urls[] = $permalink;
-		}
-
-		magazine_category_feature_purge_host_cache( $post_id );
-	}
-
-	/**
-	 * Lets a CDN integration purge the exact URLs a new article affects.
-	 *
-	 * CloudFront does not watch WordPress post saves. Something in the stack
-	 * has to invalidate these paths, or the edge keeps the previous HTML
-	 * until its own TTL.
-	 *
-	 * @param string[] $urls         Public URLs whose HTML embeds the block.
-	 * @param int[]    $category_ids Categories whose membership just changed.
-	 */
-	do_action( 'magazine_category_feature_purge_urls', $urls, array_values( array_unique( array_map( 'intval', $category_ids ) ) ) );
+	return array_values( array_unique( $post_ids ) );
 }
 
 /**
