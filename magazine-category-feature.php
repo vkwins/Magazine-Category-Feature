@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'MAGAZINE_CATEGORY_FEATURE_DIR', __DIR__ );
 define( 'MAGAZINE_CATEGORY_FEATURE_CACHE_GROUP', 'magazine-category-feature' );
-define( 'MAGAZINE_CATEGORY_FEATURE_CACHE_TTL', 5 * MINUTE_IN_SECONDS );
+define( 'MAGAZINE_CATEGORY_FEATURE_CACHE_TTL',  HOUR_IN_SECONDS );
 
 
 require_once MAGAZINE_CATEGORY_FEATURE_DIR . '/src/magazine-category-feature/includes/query.php';

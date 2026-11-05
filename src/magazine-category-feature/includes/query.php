@@ -23,7 +23,6 @@ function magazine_category_feature_get_posts( int $category_id ): array {
 	if ( $category_id <= 0 ) {
 		return array();
 	}
-
 	$cache_key = magazine_category_feature_cache_key( $category_id );
 	$cached    = wp_cache_get( $cache_key, MAGAZINE_CATEGORY_FEATURE_CACHE_GROUP );
 
@@ -47,11 +46,9 @@ function magazine_category_feature_get_posts( int $category_id ): array {
 }
 
 /**
- * Query arguments for the five newest posts.
+ * Query arguments for the five newest published posts in one category.
  *
- * The filter lets a brand exclude a tag or pin a meta query without copying
- * this plugin. The flags after the filter keep the query cheap and the layout
- * contract intact: five published posts, no pagination count, sticky posts ignored.
+ * Sticky posts are ignored. The order is newest date first, then highest ID.
  *
  * @param int $category_id Category term id.
  * @return array<string, mixed>
@@ -67,24 +64,9 @@ function magazine_category_feature_query_args( int $category_id ): array {
 			'ID'   => 'DESC',
 		),
 		'ignore_sticky_posts'    => true,
-		'no_found_rows'          => true,
 		'update_post_term_cache' => false,
-		'magazine_category_feature_query' => true,
 	);
 
-	/**
-	 * Filters the query before it runs.
-	 *
-	 * @param array<string, mixed> $args        WP_Query arguments.
-	 * @param int                  $category_id Category term id.
-	 */
-	$args = apply_filters( 'magazine_category_feature_query_args', $args, $category_id );
-
-	$args['post_type']           = 'post';
-	$args['post_status']         = 'publish';
-	$args['posts_per_page']      = 5;
-	$args['no_found_rows']       = true;
-	$args['ignore_sticky_posts'] = true;
 
 	return $args;
 }
