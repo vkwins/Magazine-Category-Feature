@@ -290,12 +290,8 @@ function magazine_category_feature_forget_categories( array $category_ids ): voi
 /**
  * Purges published content that contains this block for the given categories.
  *
- * The block comment stored in post_content looks like:
- * <!-- wp:magazine-category-feature/articles {"categoryId":12,"showCategoryLabel":true} /-->
- *
- * This runs on save, not on page view. A LIKE query here is acceptable.
- * A busy multisite would replace it with a lookup table written when the
- * landing page is saved. That version is described in TECHNICAL-NOTE.md.
+ * Targeting comes from the lookup table written when content is saved.
+ * Template and template-part usage resolves to front-page URLs.
  *
  * @param int[] $category_ids Category term IDs.
  */
@@ -308,21 +304,6 @@ function magazine_category_feature_purge_pages_for_categories( array $category_i
 	$lookup = magazine_category_feature_lookup_rows_for_categories( $category_ids );
 	$post_ids = $lookup['post_ids'];
 	$urls     = $lookup['urls'];
-
-	/**
-	 * Enables the legacy post_content scan fallback.
-	 *
-	 * Default is false so large sites avoid LIKE scans on every publish.
-	 * Enable temporarily if you need to validate lookup coverage.
-	 *
-	 * @param bool  $enabled      Whether to run the legacy scan.
-	 * @param int[] $category_ids Category IDs being purged.
-	 */
-	$use_fallback_scan = (bool) apply_filters( 'magazine_category_feature_enable_content_scan_fallback', false, $category_ids );
-	if ( $use_fallback_scan ) {
-		$fallback_post_ids = magazine_category_feature_find_posts_by_content_scan( $category_ids );
-		$post_ids          = array_values( array_unique( array_merge( $post_ids, $fallback_post_ids ) ) );
-	}
 
 	foreach ( $post_ids as $post_id ) {
 		$permalink = get_permalink( $post_id );
@@ -427,48 +408,6 @@ function magazine_category_feature_template_part_urls(): array {
 	$urls = apply_filters( 'magazine_category_feature_template_part_urls', $urls );
 
 	return array_values( array_unique( array_filter( array_map( 'strval', (array) $urls ) ) ) );
-}
-
-/**
- * Legacy content-scan fallback for direct block placements.
- *
- * @param int[] $category_ids Category IDs.
- * @return int[]
- */
-function magazine_category_feature_find_posts_by_content_scan( array $category_ids ): array {
-	global $wpdb;
-
-	$post_ids = array();
-
-	foreach ( $category_ids as $category_id ) {
-		$category_id = (int) $category_id;
-		if ( $category_id <= 0 ) {
-			continue;
-		}
-
-		/*
-		 * The comma form matches a categoryId followed by another attribute.
-		 * The brace form matches a categoryId that is the last attribute.
-		 * Both are anchored on the digits so category 5 does not match 50.
-		 */
-		$found = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts}
-				WHERE post_status = 'publish'
-				AND post_content LIKE %s
-				AND ( post_content LIKE %s OR post_content LIKE %s )",
-				'%wp:magazine-category-feature/articles%',
-				'%"categoryId":' . $category_id . ',%',
-				'%"categoryId":' . $category_id . '}%'
-			)
-		);
-
-		foreach ( $found as $found_id ) {
-			$post_ids[] = (int) $found_id;
-		}
-	}
-
-	return array_values( array_unique( $post_ids ) );
 }
 
 /**
